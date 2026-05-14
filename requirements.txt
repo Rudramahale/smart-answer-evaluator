@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+nltk
+numpy
+sentence-transformers
+torch
+

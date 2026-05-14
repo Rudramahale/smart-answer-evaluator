@@ -1,0 +1,56 @@
+1. Content side (before any exam runs)
+Question bank lives in new_dataset.csv: each row has ID, Question, Answer (reference), Keywords (rubric terms).
+An authoring / admin tool (your “question picker” at design time) lets staff choose which row (which ID) goes into an exam paper or item bank.
+Your LMS / exam DB stores something like:
+exam_item_id, external_question_id (= CSV ID), prompt text (often a copy of Question), timing, points mapping, etc.
+So: the picker’s job is to attach the correct numeric ID from the CSV to that exam item so scoring knows which rubric row to use.
+
+2. Student takes the exam (runtime)
+Student opens the online exam page (frontend).
+Frontend loads the paper from your main exam API (not from new_dataset.csv directly): it gets items including question_id (the CSV ID) and the text shown to the student (usually the Question field, or your own wording if you keep mapping).
+Student types an answer in the textarea for that item.
+On Submit / Save / End section (whatever you implement), the frontend sends to your main backend something like:
+{ "attempt_item_id": "...", "question_id": 240, "student_answer": "..." }
+(exact shape is your choice; the important part is question_id + student_answer.)
+Note: The browser typically does not call app.py directly in production (CORS, secrets, abuse). It calls your exam backend, which then calls the scorer.
+
+3. Main exam backend → this project’s app.py
+Your exam backend validates the session, deadline, anti-cheating rules, max length, etc.
+It performs an HTTP POST to this service, e.g.
+POST http://<scorer-host>:8000/check
+with JSON body exactly matching app.py’s model:
+{
+  "question_id": 240,
+  "student_answer": "text the student entered"
+}
+app.py (FastAPI) parses the body into AnswerRequest (question_id: int, student_answer: str).
+It calls check_answer(question_id, student_answer) from evaluator.py.
+evaluator loads that ID row from new_dataset.csv (via cached row map), runs preprocessing + keyword logic + embeddings + optional cross-encoder, applies gates and rubric table, returns {"marks": N} (0–6) or {"error": "..."}.
+app.py returns JSON to your backend, or raises 400 if error is present, 500 on unexpected failure.
+
+4. After the score returns
+Your exam backend stores marks (and optionally the text) on the attempt record.
+Frontend shows “saved” / score according to your policy (immediate score vs hidden until publish).
+Flow diagram (system view)
+Authoring / admin
+Student exam
+This project - AI scorer
+POST question_id + student_answer
+marks or error
+chooses row
+stores ID in exam DB
+HTTPS JSON attempt_item + question_id + answer
+result to show / store
+new_dataset.csv
+Question picker
+Exam DB
+Exam website frontend
+Main exam backend
+app.py FastAPI /check
+evaluator.check_answer
+Minimal sequence (one answer check)
+Picker → exam item linked to question_id = CSV ID.
+Student → enters answer; frontend → exam backend with question_id + text.
+Exam backend → POST /check on app.py.
+app.py → evaluator.check_answer → {"marks": …} back to backend → student UI / DB.
+If you want, the next refinement is a concrete JSON contract between your frontend and your main backend (separate from /check) so question_id is never confused with your internal attempt_item_id.

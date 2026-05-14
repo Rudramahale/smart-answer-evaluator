@@ -1,0 +1,15 @@
+step 1 :
+- py -m venv myvenv
+
+- ./myvenv/scripts/activate or in mac : source myvenv/bin/activate
+
+- pip install -r requirements.txt
+
+step 2 : run setup.py to setup nltk
+
+
+step 3 : 
+uvicorn main:app --reload 
+
+step 4 : run request.py
+
